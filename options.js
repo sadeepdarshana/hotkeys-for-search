@@ -1,4 +1,5 @@
-var background = chrome.extension.getBackgroundPage();
+// In MV3, we can't access the background page directly, so we use messaging
+var currentSettings = {}; // Make this global to the file
 
 document.addEventListener('DOMContentLoaded', function()
 {
@@ -13,34 +14,47 @@ document.addEventListener('DOMContentLoaded', function()
 		document.getElementById("shortcut4").textContent = commands[4].shortcut;
 	});
 
+	// Get settings from background service worker
+	chrome.runtime.sendMessage({action: "getSettings"}, function(response) {
+		if (response && response.settings) {
+			currentSettings = response.settings;
 
-	// Populate options page with current values
-	document.getElementById("search1").value = background.dict["search1"];
-	document.getElementById("search2").value = background.dict["search2"];
-	document.getElementById("search3").value = background.dict["search3"];
-	document.getElementById("search4").value = background.dict["search4"];
-	document.getElementById("openNewTab").checked = background.dict["openNewTab"];
-	document.getElementById("openOnLeft").checked = background.dict["openOnLeft"];
-	document.getElementById("openInBackground").checked = background.dict["openInBackground"];
-	document.getElementById("openURLDirectly").checked = background.dict["openURLDirectly"];
-	document.getElementById("openNewTab").dispatchEvent(eventNewTabChecked);
-	enableNewTabSettings();
+			// Populate options page with current values
+			document.getElementById("search1").value = currentSettings["search1"] || "";
+			document.getElementById("search2").value = currentSettings["search2"] || "";
+			document.getElementById("search3").value = currentSettings["search3"] || "";
+			document.getElementById("search4").value = currentSettings["search4"] || "";
+			document.getElementById("openNewTab").checked = currentSettings["openNewTab"] || false;
+			document.getElementById("openOnLeft").checked = currentSettings["openOnLeft"] || false;
+			document.getElementById("openInBackground").checked = currentSettings["openInBackground"] || false;
+			document.getElementById("openURLDirectly").checked = currentSettings["openURLDirectly"] || false;
+			document.getElementById("openNewTab").dispatchEvent(eventNewTabChecked);
+			enableNewTabSettings();
+		}
+	});
 
 	// Get default values if Defaults button is clicked
 	document.getElementById("Defaults").addEventListener("click", defaults, false);
 
 	function defaults()
 	{
-		defaultSettings = background.getDefaultSettings();
-		document.getElementById("search1").value = defaultSettings.search1;
-		document.getElementById("search2").value = defaultSettings.search2;
-		document.getElementById("search3").value = defaultSettings.search3;
-		document.getElementById("search4").value = defaultSettings.search4;
-		document.getElementById("openNewTab").checked = defaultSettings.openNewTab;
-		document.getElementById("openOnLeft").checked = defaultSettings.openOnLeft;
-		document.getElementById("openInBackground").checked = defaultSettings.openInBackground;
-		document.getElementById("openURLDirectly").checked = defaultSettings.openURLDirectly;
-		document.getElementById("openNewTab").dispatchEvent(eventNewTabChecked);
+		chrome.runtime.sendMessage({action: "getDefaultSettings"}, function(response) {
+			if (response && response.settings) {
+				// Update currentSettings with default values
+				currentSettings = response.settings;
+
+				// Update form with default values
+				document.getElementById("search1").value = currentSettings.search1;
+				document.getElementById("search2").value = currentSettings.search2;
+				document.getElementById("search3").value = currentSettings.search3;
+				document.getElementById("search4").value = currentSettings.search4;
+				document.getElementById("openNewTab").checked = currentSettings.openNewTab;
+				document.getElementById("openOnLeft").checked = currentSettings.openOnLeft;
+				document.getElementById("openInBackground").checked = currentSettings.openInBackground;
+				document.getElementById("openURLDirectly").checked = currentSettings.openURLDirectly;
+				document.getElementById("openNewTab").dispatchEvent(eventNewTabChecked);
+			}
+		});
 	}
 
 	// Link to Chrome extensions page
@@ -56,17 +70,20 @@ document.addEventListener('DOMContentLoaded', function()
 	// Save settings when closing options page
 	addEventListener("unload", function(event)
 	{
-		background.dict["search1"] = document.getElementById("search1").value;
-		background.dict["search2"] = document.getElementById("search2").value;
-		background.dict["search3"] = document.getElementById("search3").value;
-		background.dict["search4"] = document.getElementById("search4").value;
-		background.dict["openNewTab"] = document.getElementById("openNewTab").checked;
-		background.dict["openOnLeft"] = document.getElementById("openOnLeft").checked;
-		background.dict["openInBackground"] = document.getElementById("openInBackground").checked;
-		background.dict["openURLDirectly"] = document.getElementById("openURLDirectly").checked;
-		background.chrome.storage.sync.set(
-		{
-			'dict': background.dict
+		// Update currentSettings with form values
+		currentSettings["search1"] = document.getElementById("search1").value;
+		currentSettings["search2"] = document.getElementById("search2").value;
+		currentSettings["search3"] = document.getElementById("search3").value;
+		currentSettings["search4"] = document.getElementById("search4").value;
+		currentSettings["openNewTab"] = document.getElementById("openNewTab").checked;
+		currentSettings["openOnLeft"] = document.getElementById("openOnLeft").checked;
+		currentSettings["openInBackground"] = document.getElementById("openInBackground").checked;
+		currentSettings["openURLDirectly"] = document.getElementById("openURLDirectly").checked;
+
+		// Send settings to background service worker
+		chrome.runtime.sendMessage({
+			action: "saveSettings",
+			settings: currentSettings
 		});
 	}, true);
 

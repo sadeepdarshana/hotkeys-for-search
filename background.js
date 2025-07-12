@@ -1,4 +1,18 @@
-var dict = {};
+// Keep service worker alive
+chrome.runtime.onInstalled.addListener(() => {
+  console.log("Extension installed");
+});
+
+// In MV3, we need to keep the service worker alive with an alarm
+chrome.alarms.create("keepAlive", { periodInMinutes: 1 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "keepAlive") {
+    console.log("Service worker kept alive");
+  }
+});
+
+// Store settings in a variable during service worker lifetime
+let dict = {};
 
 function getDefaultSettings()
 {
@@ -75,9 +89,40 @@ chrome.storage.onChanged.addListener(function(changes, namespace)
 {
 	for (key in changes)
 	{
-		dict[key] = changes[key];
+		if (changes[key].newValue !== undefined) {
+			dict[key] = changes[key].newValue;
+		}
 	}
 });
+
+// Handle messages from options.js
+chrome.runtime.onMessage.addListener(
+  function(request, sender, sendResponse) {
+    if (request.action === "getSettings") {
+      // Load settings from storage first to ensure we have the latest
+      chrome.storage.sync.get('dict', function(storageDict) {
+        if (storageDict.dict) {
+          dict = storageDict.dict;
+        }
+        sendResponse({settings: dict});
+      });
+      return true; // Required for async sendResponse
+    }
+    else if (request.action === "getDefaultSettings") {
+      sendResponse({settings: getDefaultSettings()});
+      return true;
+    }
+    else if (request.action === "saveSettings") {
+      dict = request.settings;
+      chrome.storage.sync.set({
+        'dict': dict
+      }, function() {
+        sendResponse({success: true});
+      });
+      return true; // Required for async sendResponse
+    }
+  }
+);
 
 // Listen to keyboard hotkeys
 chrome.commands.onCommand.addListener(function(command)
@@ -103,58 +148,65 @@ chrome.commands.onCommand.addListener(function(command)
 	// Get selected string from current tab
 	if (searchURL != "")
 	{
-		chrome.tabs.executeScript(null,
-			{
-				code: "window.getSelection().toString()"
+		// In MV3, we need to use chrome.scripting.executeScript instead of chrome.tabs.executeScript
+		chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+			chrome.scripting.executeScript({
+				target: { tabId: tabs[0].id },
+				func: function() {
+					return window.getSelection().toString();
+				}
 			},
-			function(selectedText)
-			{
-				if (selectedText != "")
-				{
-					var targetURL;
-					if (dict["openURLDirectly"] && validURL(selectedText.toString()))
+			function(results) {
+				if (results && results[0] && results[0].result) {
+					var selectedText = results[0].result;
+					if (selectedText != "")
 					{
-						targetURL = selectedText.toString();
-						if (!targetURL.startsWith("http"))
+						var targetURL;
+						if (dict["openURLDirectly"] && validURL(selectedText.toString()))
 						{
-							targetURL = "https://" + targetURL;
-						}
-					}
-					else
-					{
-						targetURL = searchURL + selectedText;
-					}
-					// Open result in current or new tab
-					if (dict["openNewTab"])
-					{
-						// Get index of current tab for correct positioning of new tab
-						chrome.tabs.query(
-						{
-							currentWindow: true,
-							active: true
-						}, function(tabs)
-						{
-							var targetTabIndex = tabs[0].index;
-							if (!dict["openOnLeft"])
+							targetURL = selectedText.toString();
+							if (!targetURL.startsWith("http"))
 							{
-								targetTabIndex++;
+								targetURL = "https://" + targetURL;
 							}
-							chrome.tabs.create(
-							{
-								index: targetTabIndex,
-								url: targetURL,
-								active: !dict["openInBackground"]
-							});
-						});
-					}
-					else
-					{
-						chrome.tabs.update(
+						}
+						else
 						{
-							url: targetURL
-						});
+							targetURL = searchURL + selectedText;
+						}
+						// Open result in current or new tab
+						if (dict["openNewTab"])
+						{
+							// Get index of current tab for correct positioning of new tab
+							chrome.tabs.query(
+							{
+								currentWindow: true,
+								active: true
+							}, function(tabs)
+							{
+								var targetTabIndex = tabs[0].index;
+								if (!dict["openOnLeft"])
+								{
+									targetTabIndex++;
+								}
+								chrome.tabs.create(
+								{
+									index: targetTabIndex,
+									url: targetURL,
+									active: !dict["openInBackground"]
+								});
+							});
+						}
+						else
+						{
+							chrome.tabs.update(
+							{
+								url: targetURL
+							});
+						}
 					}
 				}
 			});
+		});
 	}
 });
