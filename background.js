@@ -24,7 +24,7 @@ function getDefaultSettings()
 	defaultSettings["openNewTab"] = true;
 	defaultSettings["openOnLeft"] = false;
 	defaultSettings["openInBackground"] = false;
-	defaultSettings["openURLDirectly"] = false;
+	defaultSettings["openURLDirectly"] = true;
 	return defaultSettings;
 }
 
@@ -52,7 +52,7 @@ chrome.runtime.onInstalled.addListener(function(details)
 			storageDict.openNewTab = (storageDict.openNewTab == "true");
 			storageDict.openOnLeft = (storageDict.openOnLeft == "true");
 			storageDict.openInBackground = (storageDict.openInBackground == "true");
-			storageDict.openURLDirectly = false;
+			storageDict.openURLDirectly = true;
 			dict = storageDict;
 		}
 		// Get stored settings or defaults
