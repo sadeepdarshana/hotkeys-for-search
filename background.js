@@ -12,7 +12,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 // Store settings in a variable during service worker lifetime
-let dict = {};
+// Initialize with defaults to avoid undefined values in MV3 service worker cold starts
+let dict = getDefaultSettings();
 
 function getDefaultSettings()
 {
@@ -87,10 +88,11 @@ chrome.runtime.onStartup.addListener(function()
 // Get changes of stored settings
 chrome.storage.onChanged.addListener(function(changes, namespace)
 {
-	for (key in changes)
+	for (const key in changes)
 	{
-		if (changes[key].newValue !== undefined) {
-			dict[key] = changes[key].newValue;
+		if (key === 'dict' && changes[key].newValue !== undefined) {
+			// Replace entire settings object when 'dict' is updated in storage
+			dict = changes[key].newValue;
 		}
 	}
 });
@@ -127,7 +129,7 @@ chrome.runtime.onMessage.addListener(
 // Listen to keyboard hotkeys
 chrome.commands.onCommand.addListener(function(command)
 {
-	var searchURL;
+	let searchURL;
 	// Select search site according to hotkey pressed
 	switch (command)
 	{
@@ -145,8 +147,13 @@ chrome.commands.onCommand.addListener(function(command)
 			break;
 	}
 
+	// Guard against undefined/empty searchURL to avoid navigating to chrome-extension://.../undefined
+	if (typeof searchURL !== 'string' || searchURL.trim() === "")
+	{
+		return;
+	}
+
 	// Get selected string from current tab
-	if (searchURL != "")
 	{
 		// In MV3, we need to use chrome.scripting.executeScript instead of chrome.tabs.executeScript
 		chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
